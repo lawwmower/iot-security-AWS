@@ -7,15 +7,18 @@ from datetime import datetime, timedelta, timezone
 # --- CONFIGURATION ---
 # TODO: EDIT THIS LINE
 # Paste the exact name of your SageMaker endpoint here
-SAGEMAKER_ENDPOINT_NAME = "randomcutforest-2025-09-18-17-27-57-413" 
+SAGEMAKER_ENDPOINT_NAME = "iot-rcf-4feat-prod" 
 DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
-ANOMALY_THRESHOLD = float(os.environ.get('ANOMALY_THRESHOLD', '1.0'))
+ANOMALY_THRESHOLD = float(os.environ.get('ANOMALY_THRESHOLD', '2.0'))
 
 DYNAMODB_TABLE_NAME = os.environ.get('DYNAMODB_TABLE_NAME', 'IotDeviceFeatures')
+#FEATURE_COLUMNS = [
+#    'orig_bytes_sum', 'resp_bytes_sum', 'orig_pkts_sum', 'resp_pkts_sum',
+#    'duration_mean', 'unique_dest_ips', 'unique_dest_ports', 'conn_count',
+#    'alert_count', 'unique_alert_signatures'
+#]
 FEATURE_COLUMNS = [
-    'orig_bytes_sum', 'resp_bytes_sum', 'orig_pkts_sum', 'resp_pkts_sum',
-    'duration_mean', 'unique_dest_ips', 'unique_dest_ports', 'conn_count',
-    'alert_count', 'unique_alert_signatures'
+    'orig_bytes_sum', 'resp_bytes_sum', 'conn_count', 'alert_count'
 ]
 
 # Initialize boto3 clients
@@ -140,7 +143,8 @@ def lambda_handler(event, context):
             anomaly_score = scores[0]
             print(f"SUCCESS for {device_id}: Anomaly Score = {anomaly_score}")
             if anomaly_score > ANOMALY_THRESHOLD:
-                print(f"ALERT! High anomaly score for device {device_id}!")
+                print(f"ALERT! Anomaly score {anomaly_score} exceeds threshold {ANOMALY_THRESHOLD} for device {device_id}.")
+                #print(f"ALERT! High anomaly score for device {device_id}!")
                 send_discord_alert(device_id, anomaly_score, window_to_query)
 
         except Exception as e:
