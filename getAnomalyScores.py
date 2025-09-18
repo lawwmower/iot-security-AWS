@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 # --- CONFIGURATION ---
 # TODO: EDIT THIS LINE
 # Paste the exact name of your SageMaker endpoint here
-SAGEMAKER_ENDPOINT_NAME = "randomcutforest-2025-09-01-22-03-57-575" 
+SAGEMAKER_ENDPOINT_NAME = "randomcutforest-2025-09-18-17-27-57-413" 
 DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
 ANOMALY_THRESHOLD = float(os.environ.get('ANOMALY_THRESHOLD', '1.0'))
 
@@ -26,6 +26,7 @@ http = urllib3.PoolManager()
 
 def send_discord_alert(device_id, anomaly_score, timestamp):
     if not DISCORD_WEBHOOK_URL:
+        print("Discord webhook URL is not set. Skipping alert.")
         return
     
     message = {
@@ -61,7 +62,7 @@ def lambda_handler(event, context):
     # 1. Calculate the timestamp for the previous minute to query
     now_utc = datetime.now(timezone.utc)
     # Go back 2 minutes to ensure the aggregation window is fully closed
-    target_time = now_utc - timedelta(minutes=60) 
+    target_time = now_utc - timedelta(minutes=2) 
     window_to_query = target_time.strftime('%Y-%m-%dT%H:%M:00Z')
     
     print(f"Target time: {target_time}")
@@ -76,13 +77,41 @@ def lambda_handler(event, context):
             ExpressionAttributeValues={':ts': window_to_query}
         )
         items = response.get('Items', [])
+        
+        print(f"Query returned {len(items)} items")
+        
     except Exception as e:
         print(f"Error querying DynamoDB: {e}")
         return
 
     if not items:
         print("No feature sets found for the target window.")
-        return
+        
+        # Fallback: Try to find the most recent timestamp and query that
+        print("\nTrying fallback: Finding most recent timestamp...")
+        try:
+            scan_response = table.scan(Limit=10)
+            recent_items = scan_response.get('Items', [])
+            if recent_items:
+                # Get the most recent timestamp
+                timestamps = [item.get('WindowTimestamp') for item in recent_items if item.get('WindowTimestamp')]
+                if timestamps:
+                    most_recent = max(timestamps)
+                    print(f"Most recent timestamp found: {most_recent}")
+                    
+                    # Query using the most recent timestamp
+                    fallback_response = table.query(
+                        IndexName='WindowTimestamp-index',
+                        KeyConditionExpression='WindowTimestamp = :ts',
+                        ExpressionAttributeValues={':ts': most_recent}
+                    )
+                    items = fallback_response.get('Items', [])
+                    print(f"Fallback query found {len(items)} items")
+        except Exception as scan_error:
+            print(f"Error in fallback scan: {scan_error}")
+        
+        if not items:
+            return
 
     print(f"Found {len(items)} feature sets to score.")
 
@@ -110,7 +139,6 @@ def lambda_handler(event, context):
             # --- HANDLE THE SCORE ---
             anomaly_score = scores[0]
             print(f"SUCCESS for {device_id}: Anomaly Score = {anomaly_score}")
-
             if anomaly_score > ANOMALY_THRESHOLD:
                 print(f"ALERT! High anomaly score for device {device_id}!")
                 send_discord_alert(device_id, anomaly_score, window_to_query)
