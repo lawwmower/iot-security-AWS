@@ -1,135 +1,61 @@
-# iot-security-AWS
-Cloud-Native IoT Intrusion Detection and Response Pipeline
-Overview
-
-This project implements a cloud-native, end-to-end IoT intrusion detection and response pipeline. It integrates on-premises network sensors with AWS-managed services to deliver real-time anomaly detection, graph-based lateral movement analysis, and automated containment via serverless orchestration.
-
-The system spans the full lifecycle:
-
-Data Ingestion: Collect Zeek and Suricata logs from IoT environments.
-
-Feature Engineering: Transform raw logs into time-windowed features using AWS Lambda and DynamoDB.
-
-Anomaly Detection: Deploy a Random Cut Forest (RCF) model on Amazon SageMaker for per-device anomaly scoring.
-
-Graph Analytics: Model internal communications in Amazon Neptune to detect lateral movement.
-
-Automated Response: Orchestrate containment, notification, and rollback using AWS Step Functions.
-
-Architecture
-Components
-
-On-Premises Sensor:
-
-Mini-PC with Zeek + Suricata to generate logs.
-
-Vector agent forwards logs to AWS.
-
-Ingestion Layer:
-
-Amazon Kinesis Data Firehose → streams logs to Amazon S3.
-
-Logs partitioned into zeek-logs/ and suricata-logs/.
-
-Feature Engineering:
-
-S3 Event Notifications trigger AWS Lambda.
-
-Lambda parses logs, aggregates features (30–60s windows), stores in:
-
-S3 Data Lake (offline training).
-
-SageMaker Feature Store (real-time inference).
-
-DynamoDB used for stateful aggregation across Lambda invocations.
-
-Detection Layer 1 – Per-Device Anomaly:
-
-SageMaker Random Cut Forest (RCF) for unsupervised anomaly detection.
-
-Lambda publishes anomaly alerts to Amazon EventBridge.
-
-Detection Layer 2 – Lateral Movement Graph:
-
-Amazon Neptune Analytics stores device communication graphs.
-
-Gremlin queries + GraphStorm (Graph ML) used to detect lateral movement.
-
-Response Orchestration:
-
-AWS Step Functions execute the SOAR-lite playbook:
-
-Quarantine device (via Isolation Lambda → network API).
-
-Capture forensic evidence in S3/DynamoDB.
-
-Notify via Amazon SNS (email, Slack, PagerDuty).
-
-Timed rollback or escalation based on new anomalies.
-
-Deployment
-Prerequisites
-
-AWS Account with permissions for Lambda, S3, DynamoDB, SageMaker, Neptune, EventBridge, Step Functions, and SNS.
-
-On-premises sensor with Zeek, Suricata, and Vector configured to forward logs.
-
-IAM roles and policies with least-privilege principles applied.
-
-Setup Steps
-
-Provision AWS Resources
-
-Create Kinesis Firehose → S3 bucket for logs.
-
-Configure S3 Event Notifications.
-
-Deploy Lambda functions (Feature Engineering, Scoring, Graph Ingestion, Isolation).
-
-Feature Engineering Pipeline
-
-Configure DynamoDB for window state management.
-
-Update Lambda to write features to S3 + SageMaker Feature Store.
-
-Model Training and Deployment
-
-Train Random Cut Forest (RCF) model with SageMaker Training Jobs.
-
-Deploy model to a SageMaker Endpoint for real-time inference.
-
-Graph Database Setup
-
-Create Neptune cluster.
-
-Load network graph data via Neptune Bulk Loader or direct writes.
-
-Deploy graph queries for lateral movement detection.
-
-Incident Response Playbook
-
-Deploy Step Functions workflow for quarantine, notifications, rollback.
-
-Configure EventBridge rules to trigger workflows on anomaly alerts.
-
-Monitoring & Operations
-
-Amazon CloudWatch monitors Lambda errors, Kinesis delivery metrics, SageMaker endpoint latency, Neptune query performance, and Step Functions execution logs.
-
-False Positive Controls:
-
-Allowlist via DynamoDB.
-
-Cooldowns to prevent flapping.
-
-Multi-layer correlation (require alerts from both anomaly + graph layers).
-
-Roadmap & Stretch Goals
-
-Explainability: Use SageMaker Clarify for SHAP-based feature importance.
-
-TLS Fingerprinting: Integrate Zeek ssl.log for JA3/JA3S analysis.
-
-Dashboard: Build monitoring UI with Athena + QuickSight/Grafana.
-
-Manual Controls: Web interface for manual device release via Step Functions override.
+# AWS-based Wi-Fi hybrid Intrusion Detection & Response System
+A hybrid intrusion detection pipeline that monitors network traffic using Zeek and Suricata, detects anomalous activity, and automates incident response using AWS services.
+Created by: Lawrence Nguyen, Michael Tran, Rhett Atkin
+# Lawrence Nguyen - Cloud Services, Cloud Infrastructure, Security / Detection
+* Designed the IDS pipeline architecture, implemented Zeek and Suricata sensors, and developed detection workflows.        
+# Michael Tran - Backend Developer, AI algorithm trainer,
+* Built the backend services for alert visualization and system monitoring, detection tuning, and incident response automation.
+# Project Overview/Pipeline
+This project implements an end-to-end intrusion detection and response system designed to simulate a real Security Operations Center (SOC) workflow. The system collects network telemetry from Zeek and Suricata sensors, processes logs in a cloud data pipeline, and applies machine learning and graph analytics to detect anomalous behavior and potential lateral movement.
+
+Alerts trigger automated response playbooks that isolate affected devices, capture forensic evidence, and notify stakeholders.
+
+The goal was to explore how modern cloud-native architectures can support scalable detection, reduce response time, and improve visibility into network activity.
+# Key Concepts
+* Network Intrusion Detection Systems (NIDS)
+* Signature and anomaly-based detection
+* Incident response automation
+* Defense-in-depth architecture
+# Architecture Diagram
+* Data Ingestion from network sensors
+* Feature engineering pipeline
+* Machine learning anomaly detection
+* Graph-Based behavioral analysis
+* Automated incident response orchestration
+* (Add diagram later)
+# Tech Stack
+* Sensors: Zeek, Suricata
+* Cloud Services: AWS Kinesis Data Firehose, Amazon S3, AWS Lambda, DynamoDB, Amazon SageMaker (RCF), SageMaker Feature Store, Amazon Neptune, AWS Step Functions, Amazon SNS / EventBridge, CloudWatch
+* Ping Alerts: Discord
+# Detection Pipeline
+# Data Ingestion
+Network Telemetry is collected from Zeek and Suricata sensors and streamed through Kinesis Data Firehose into an S3 data lake for durable storage and processing.
+# Feature Engineering
+Event-driven Lambda functions parse log data, generate time-windowed behavioral features, and store results in both S3 for training and SageMaker Feature Store for real-time inference.
+# Machine Learning Detection
+A Random Cut Forest model deployed via SageMaker analyzes device behavior to generate anomaly scores and detect deviations from normal traffic patterns.
+# Lateral Movement Detection
+Network connections are modeled as a graph using Amazon Neptune, enabling detection of suspicious communication patterns such as new internal connections, risky port usage, and abnormal fan-in behavior. 
+This layer helps identify sophisticated attacks that may not be detected through per-device anomaly analysis alone.
+# Incident Response Workflow
+High-confidence alerts trigger an automated response playbook orchestrated by AWS Step Functions.
+
+The workflow:
+* Isolates affected devices
+* Captures forensic evidence
+* Sends notifications to Discord.
+* Implements rollback after a defined period
+# Monitoring & Reliability
+System health and performance are monitored using CloudWatch metrics and logs, enabling visibility into pipeline performance, detection latency, and workflow execution.
+# Challenges & Lessons Learned
+* Designing scalable event-driven pipelines
+* Managing state for time-windowed feature aggregation
+* Balancing detection sensitivity with false positives
+* Understanding normal vs anomalous network behavior
+* Integrating multiple detection layers
+* AWS costs and management.
+# Future improvements
+* Add threat intelligence feeds
+* Build SIEM dashboard visualizations
+* Add TLS fingerprinting
+* Improve alert correlation across detection layers
